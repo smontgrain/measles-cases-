@@ -1,7 +1,47 @@
 ---
-title: "Project step 1"
-format: html
-editor: visual
+title: "Project Step 1"
+subtitle: "Functions + Fish"
+author: "Sebastien Montgrain"
+format: 
+  html:
+    theme: minty
+    code-tools: true
+    code-fold: true
+self-contained: true
+editor: source
+embed-resources: true
+execute: 
+  echo: true
+  error: true
+toc: true
+toc-title: Table of Contents
 ---
 
-## Data
+## Measles Cases Across The World
+
+Reading in the data:
+
+```{r}
+cases_month <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_month.csv')
+cases_year <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_year.csv')
+head(cases_month)
+head(cases_year)
+```
+
+### Context:
+
+This data set is about measles and rubella cases around the world, provided by the World Health Organization on June 12th, 2025. It has data going back to 2012 of the monthly and yearly measles and rubella cases per country. It also has separate columns for suspected cases and confirmed cases, and some other classifications of cases.
+
+### Cleaning:
+
+To clean the month data, they used janitor :: clean_names() to make column names lowercase and connected with underscores instead of spaces, this makes it easier to write code. Then they turned all the columns from year to discarded into numeric with mutate and as.numeric.\
+\
+To clean the year data, they used row_to_names(1) to make the top row the column headers. Then they used clean_names() again. Then they renamed a lot of column headers to shorter names, and finally deleted an extra row.
+
+### Two Research Questions From the Data:
+
+What countries have done the best at lowering measles cases since 2012?
+
+What countries have had the biggest growths in measles cases since 2012?
+
+### Two Research Questions From Supplemental Data:
