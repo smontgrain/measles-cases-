@@ -1,6 +1,5 @@
 ---
 title: "Project Step 1"
-subtitle: "Functions + Fish"
 author: "Sebastien Montgrain"
 format: 
   html:
