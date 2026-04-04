@@ -48,7 +48,7 @@ What countries have experienced the largest increase in cases since 2012?
 
 What countries have experienced the largest increase in cases since 1900?
 
-Are number measles casesrelated to a contries GDP?
+Are number measles correlated to a countries GDP?
 
 ### Visualizations:
 
