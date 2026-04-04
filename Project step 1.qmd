@@ -40,8 +40,18 @@ To clean the year data, they used row_to_names(1) to make the top row the column
 
 ### Two Research Questions From the Data:
 
-What countries have done the best at lowering measles cases since 2012?
+What continents have had the largest decrease in measles cases since 2012?
 
-What countries have had the biggest growths in measles cases since 2012?
+What countries have experienced the largest increase in cases since 2012?
 
 ### Two Research Questions From Supplemental Data:
+
+What countries have experienced the largest increase in cases since 1900?
+
+Are number measles casesrelated to a contries GDP?
+
+### Visualizations:
+
+![](images/clipboard-1394609351.png)
+
+![](images/clipboard-750000190.png)
