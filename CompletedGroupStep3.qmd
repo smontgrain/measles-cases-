@@ -1,0 +1,385 @@
+---
+title: "Project Step 3"
+author: "Sebastien Montgrain, Adrian Antonelli, Will"
+format: 
+  html:
+    theme: minty
+    code-tools: true
+self-contained: true
+editor: source
+embed-resources: true
+execute: 
+  echo: true
+  error: true
+---
+
+
+
+```{r}
+#| message: False
+library(tidyverse)
+library(forcats)
+library(scales)
+
+
+```
+# Adding our two new country-level data sources
+
+We wanted to round out our dataset by adding information about vaccinations and mortality for Measles by region.
+
+For our vaccination data, we utilized the WHO's data on vaccine reports from 2012-2024
+
+```{r}
+eval = FALSE
+library(readxl)
+library(dplyr)
+
+#Vaccine <- read_xlsx("Measles vaccination coverage 2026-15-04 12-34 UTC.xlsx")
+
+#Vaccine <- Vaccine |> filter(GROUP == "WHO_REGIONS") |> select("CODE", "YEAR", "ANTIGEN", "TARGET_NUMBER", "DOSES", "COVERAGE")
+
+#write.csv(Vaccine, "Vaccine.csv")
+
+```
+
+We have successfully created a csv file of the vaccination data.
+
+Up next, we will use web scraping
+
+```{r}
+eval = FALSE
+
+library(rvest)
+library(janitor)
+library(tidyr)
+library(stringr)
+
+url <- "https://www.cdc.gov/mmwr/volumes/71/wr/mm7147a1.htm"
+
+page <- read_html(url)
+
+tables <- page |> html_elements("table")
+
+table1 <- tables[[1]] |> 
+  html_table(fill = TRUE) |>
+  clean_names()
+
+```
+
+Now we have our table, but it's a huge mess, as we have issues such as multiple variables being placed in the same column, and rows indicating region that span all columns.
+
+To work through these issues, we consulted Chat GPT about how we could separate conjoined variables, and tidy up the region name rows.
+
+Initially we cleaned up variable names
+
+```{r}
+eval = FALSE
+
+table1 <- table1 |>
+  rename(
+    year_region = yr_who_region_no_of_countries_in_region,
+    measles_cases_pct = percentage,
+    measles_deaths_pct = percentage_2,
+    mortality_reduction_pct = percentage_3,
+    deaths_averted = percentage_4,
+    reported_cases_share = no_of_reported_measles_cases_percent_of_total_cases,
+    incidence = measles_incidence
+  )
+
+```
+
+We then were told that "\^\\d{4}" indicates the string to detect exactly 4 digits at the beginning of the string. This is essentially capturing the year.
+
+```{r}
+eval = FALSE
+
+table1 <- table1 |>
+  mutate(
+    is_year = str_detect(year_region, "^\\d{4}"),
+    region = if_else(!is_year, year_region, NA_character_)
+  ) |>
+  fill(region)
+
+table1 <- table1 |>
+  filter(is_year)
+
+```
+
+The regex section of code was explained to be the line separating the year from the number of countries per region (which were initially stuck in the same column).
+
+```{r}
+eval = FALSE
+
+table1 <- table1 |>
+  extract(
+    year_region,
+    into = c("year", "n_countries"),
+    regex = "(\\d{4}) \\((\\d+)\\)", 
+    convert = TRUE
+  )
+
+table1 <- table1 |>
+  mutate(across(
+    where(is.character),
+    ~ str_replace_all(., ",", "")
+  ))
+
+table1 <- table1 |>
+  mutate(across(
+    c(measles_cases_pct, measles_deaths_pct,
+      mortality_reduction_pct, deaths_averted,
+      reported_cases_share, incidence),
+    as.numeric
+  ))
+
+```
+
+Now we just need to filter, rename, and select relevant columns for our main data set, then save our newly configured measles coverage data.
+
+```{r}
+eval = FALSE
+
+coverage <- table1 |> 
+  filter(region != "Total (all regions)" & year != 2000) |>
+  select(year, measles_cases_pct, measles_deaths_pct, mortality_reduction_pct, deaths_averted, incidence, region)
+
+
+write.csv(coverage, "Coverage.csv")
+
+```
+
+
+***
+# Creating "meta" dataset
+
+Reading in the data:
+
+```{r}
+#| message: False
+
+cases_month <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_month.csv')
+cases_year <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_year.csv')
+vaccine <- readr::read_csv("Vaccine.csv")
+coverage <- readr::read_csv("Coverage.csv")
+```
+
+deleting useless column
+```{r}
+coverage <- coverage[,-1]
+vaccine <- vaccine[,-1]
+```
+
+```{r}
+modified_cases_year <- cases_year |>
+  select(-region, -iso3) |>
+  rename_with(~paste0("yearly_", .), - c("country", "year"))
+```
+
+
+
+```{r}
+
+complete_data <- cases_month |>
+  left_join(modified_cases_year, by = c("country", "year"))
+  
+
+vaccine <- vaccine |>
+  rename(region = CODE,
+         year = YEAR)
+
+vaccine_wide <- vaccine |>
+  pivot_wider(names_from = ANTIGEN,
+    values_from = c(TARGET_NUMBER, DOSES, COVERAGE))
+
+complete_data <- complete_data |>
+  left_join(vaccine_wide, by = c("region", "year"), relationship = "many-to-many")
+```
+
+```{r}
+modified_coverage <- coverage|>
+  mutate(region = as.factor(region)) |>
+  mutate(region = fct_recode(region,
+    "AFR" = "African",
+    "AMR" = "Americas",
+    "EMR" = "Eastern Mediterranean",
+    "EUR" = "European",
+    "SEAR" = "South-East Asia",
+    "WPR" = "Western Pacific"))
+```
+
+
+```{r}
+complete_data <- complete_data |>
+  mutate(region = as.character(region))
+
+modified_coverage <- modified_coverage |>
+  mutate(region = as.character(region))
+
+complete_data <- complete_data |>
+  left_join(modified_coverage, by = (c("region", "year")))
+
+```
+
+
+```{r}
+view(complete_data)
+write.csv(complete_data, "complete_data.csv", row.names = FALSE)
+```
+
+***
+# Visualizations 
+
+
+## This first visualization was made to show how there is some missing data for certain regions over years. We just have this in addition to our other visualizations to help readers have a better understanding of our data going forward. 
+
+
+### Which region has the highest Measles incedence rate and how has this changed between 2012 to 2024?
+
+The first visualization we wanted to create was a heat map to get a better understanding of the measles incidence rates by region over time. We figured that this would be a great visual to help better understand our data and have a greater awareness of the regions and their case rates in comparison to each other. We chose a heat map because it lets us see the regions across time and having the different colors to highlight the incidence rates makes it easier to compare. We also chose to use the range from 2012 to 2024 as this allows us to have a complete years worth of data as the 2025 data is not fully complete.
+
+```{r}
+heatData <- complete_data %>%
+  filter(year <= 2024) %>%
+  group_by(region, year) %>%
+  summarise(
+    avg_incidence = mean(yearly_measles_incidence_rate_per_1000000_total_population, na.rm = TRUE),.groups = "drop") %>%
+  mutate(
+    label = case_when(
+      avg_incidence == 0 ~ "0",
+      avg_incidence < 1 ~ "<1",
+      TRUE ~ as.character(round(avg_incidence))),
+    text_color = avg_incidence > 150)
+
+ggplot(heatData, aes(x = factor(year), y = region, 
+                     fill = avg_incidence)) +
+  geom_tile(color = "white", linewidth = 0.5) +
+  geom_text(aes(label = label, color = text_color), 
+            size = 2.8) +
+  scale_fill_gradient(
+    low = "#fff7f0",
+    high = "#8b1a0a",
+    trans = "sqrt",
+    limits = c(0, 623),
+    breaks = c(0.01, 100, 200, 300, 400, 500, 622),
+    labels = c("<1", "100", "200", "300", "400", "500", "622 (max)"),
+    name = "Avg incidence rate\n(per 1M pop)",
+    guide = guide_colorbar(
+      barheight = unit(6, "cm"),
+      barwidth = unit(0.4, "cm"))) +
+  scale_color_manual(
+    values = c("FALSE" = "#444441", "TRUE" = "white"),
+    guide = "none") +
+  scale_x_discrete(guide = guide_axis(angle = 45)) +
+  labs(
+    title = "Which region has the highest Measles incidence rate\n and how has this changed between 2012 to 2024?",
+    subtitle = "Average annual incidence rate per 1,000,000 population by region",caption = "AFR = Africa  |  AMR = Americas  |\n EMR = E. Mediterranean  |  EUR = Europe  |\n  SEAR = SE Asia  |  WPR = W. Pacific |",
+
+    x = NULL,
+    y = NULL) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid = element_blank(),
+    legend.position = "right",
+    axis.text.y = element_text(size = 11),
+    plot.title = element_text(face = "bold",
+                              size = 13),
+    plot.subtitle = element_text(size = 10))
+```
+### Conclusion:
+
+After looking at the visualization we can see that between 2014-2016 the West Pacific had a huge spike in Measles cases. However, the average incidence rates are decently spread out. Looking at the rates, we can say that the highest regions include Europe, the East Mediterranean, and Africa for the most part. There is missing data for the Americas in the years 2012 and 2013 which makes it harder for us to make conclusions on the data as a whole.
+
+
+# Visualization 1:
+
+### Do regions with higher MCV1 vaccination percentages have lower measles and rubella cases?
+
+```{r}
+disease_summary <- complete_data |>
+  group_by(region, year) |>
+  summarise(
+    Measles = sum(yearly_measles_total, na.rm = TRUE),
+    Rubella = sum(yearly_rubella_total, na.rm = TRUE),
+    mcv1_coverage = mean(COVERAGE_MCV1, na.rm = TRUE),
+    .groups = "drop"
+  ) |> filter(!is.na(mcv1_coverage), year <= 2024)
+
+disease_long_version <- disease_summary |>
+  pivot_longer(
+    cols = c(Measles, Rubella),
+    names_to = "disease",
+    values_to = "total")
+
+ggplot(disease_long_version, aes(x = year, y = total, color = mcv1_coverage, group = interaction(region, disease))) +
+  geom_line(linewidth = 0.9) +
+  geom_point(size = 1.5) +
+  facet_grid(disease ~ region, scales = "free_y") +
+  scale_color_gradient(
+    low  = "#2166ac",
+    high = "#8b1a0a",
+    name = "MCV1 vaccination (%)") +
+  scale_y_continuous(labels = comma) +
+  scale_x_continuous(breaks = c(2012, 2016, 2020, 2024)) +
+  labs(title = "Do regions with higher MCV1 vaccination percentages \nhave lower measles and rubella cases?",
+    subtitle = "Total cases by region 2012–2024 with ranging MCV1 vaccination percentage shown",
+    x = NULL,
+    y = "Total cases",
+    caption = "AFR = Africa  |  AMR = Americas  |\n EMR = E. Mediterranean  |  EUR = Europe  |\n  SEAR = SE Asia  |  WPR = W. Pacific |") +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    plot.subtitle = element_text(size = 10),
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 6),legend.position  = "bottom")
+```
+
+### Conclusion:
+
+From the data we can see that even in locations with high vaccination rates, there are still times where there are spikes in cases. From the data we can see that Africa has the lowest MCV1 vaccination percentage and consistently shows high case counts for both Measles and Rubella. The Americas show high vaccination percentages with low case counts for both diseases. In regards to the rest of the data there seems to be high vaccination percentages with varying Measles and Rubella Cases. What looks very interesting is how the East Mediterranean seems to have lower vaccination percentages however they have very low Rubella cases compared to other regions.
+
+# Visualization 2:
+
+### In regions where measles mortality reduction has increased, have case counts decreased as well?
+
+```{r}
+Mortality_Cases <- complete_data |>
+  filter(year <= 2024, 
+         !is.na(mortality_reduction_pct)) |>
+  group_by(region, year) |>
+  summarise( total_measles = sum(yearly_measles_total, na.rm = TRUE),
+    mortality_reduction_pct = mean(mortality_reduction_pct),
+    .groups = "drop") |>
+  pivot_longer(
+    c(total_measles, mortality_reduction_pct),
+    names_to = "info", 
+    values_to = "value") |>
+  mutate(info = recode(
+    info,
+    total_measles = "Total Measles Cases",
+    mortality_reduction_pct = "Mortality Reduction (%)"))
+
+ggplot(Mortality_Cases, aes(year, value, color = region, group = region)) +
+  geom_line(linewidth = 1.1) +
+  geom_point(size = 2.5) +
+  facet_wrap(~info, scales = "free_y") +
+  scale_y_continuous(labels = comma) +
+  scale_x_continuous(breaks = c(2016, 2019, 2020, 2021)) +
+  labs(
+    title = "In regions where measles mortality has been reduced,\n have case counts followed the same trend?",
+    subtitle = "Left = mortality reduction percentage by region || Right = total measles cases by region",
+    x = NULL, 
+    y = NULL,
+    caption = "AFR = Africa  |  AMR = Americas  |\n EMR = E. Mediterranean  |  EUR = Europe  |\n  SEAR = SE Asia  |  WPR = W. Pacific |") +
+  theme_minimal(base_size = 11) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12),
+    plot.subtitle = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    strip.text = element_text(face = "bold", size = 11),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom")
+```
+
+### Conclusion:
+
+We can see that for Africa while there was a upward trend in cases until 2019, as of after 2019 however the total cases have dropped and measles mortality reduction has increased showing a positive sign to fighting the disease in Africa. We can see that Europe did also have a spike of cases in 2019 however the mortality reduction percentage did not change heavily. One part of the visualization that stood out to me was how in 2019 the U.S. did have a measles case increase and the mortality reduction rate did drop a visible amount.
