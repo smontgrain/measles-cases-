@@ -1,0 +1,152 @@
+---
+title: "Project step 4"
+author: "William Cuthbert, Sebastien Montgrain, Adrian Antonelli"
+format: html
+embed-resources: TRUE
+code-fold: TRUE
+theme: darkly
+---
+
+```{r}
+#| message: False
+library(tidyverse)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(ggridges)
+cases_month <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_month.csv')
+cases_year <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_year.csv')
+```
+
+**Month Analysis at the WHO World Region Level**
+
+Expanding on an exploration of how overall measles trends differ by month, we thought it a good idea to analyze the monthly trends at a smaller level.
+
+Given we have access to the World Health Organization's 6-region system and how the reported measles cases were dispersed among those 6 regions, it was a good jumping-off point.
+
+```{r}
+#| fig-alt: "Table showing average measles cases by month for each world region."
+
+case_ranking_by_months <- cases_month |>
+  group_by(month, region) |>
+  filter(measles_total >= 0) |>
+  summarise(avg_measles = mean(measles_total, na.rm = TRUE), .groups = "drop") |>
+  mutate(month = factor(month.abb[month], levels = month.abb),
+         region = recode(region, "AFR" = "Africa", 
+                         "AMR" = "Americas", 
+                         "EMR" = "Eastern Mediterranean", 
+                         "EUR" = "Europe", 
+                         "SEAR" = "South-East Asia", 
+                         "WPR" = "Western Pacific"))
+
+case_ranking_by_months
+```
+
+Now we can plot the data, and model the region visualizations linearly.
+
+```{r}
+#| fig-alt: "Line plot showing average measles cases by month for each world region (linear model included for each), with separate panels for each region."
+
+
+ggplot(case_ranking_by_months, aes(x = month, y = avg_measles, group = region, color = region)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE,
+              linewidth = 0.5,
+              linetype = "dashed",
+              col = "black") +
+  facet_wrap(~region, scales = "free_y") +
+  labs(x = "Month", title = "Measles Cases by Month Across the World", y = "", subtitle = "Number of Total Measles Cases (Clinical, EPI linked, and Lab Confirmed)") +
+  theme_linedraw() +
+  scale_color_brewer(palette = "Dark2") +
+  theme(axis.text.x = element_text(size = 6),
+        legend.position = "none")
+```
+
+**Subsequent Month Analysis at the Country Level**
+
+From our initial plots, for all regions except the Americas, there is a negative trend in measles cases as the months in a year increase, meaning that the earlier months have seen more measles cases than the later months on average.
+
+This could potentially be a significant find for the differing American trend, so our next step was to see country-level trends of measles cases.
+
+```{r}
+#| fig-alt: "Line plot showing average measles cases by month for eight major countries, India, United States, Brazil, Nigeria, China, France, Canada and Mexico. There are separate panels for each country"
+
+
+countries <- c("Mexico", "Canada", "United States of America", "Brazil", "Nigeria", "China", "France", "India")
+
+cases_month |>
+  filter(country %in% countries) |>
+  group_by(month, country) |>
+  summarise(avg_measles = mean(measles_total, na.rm = TRUE), .groups = "drop") |>
+  mutate(month = factor(month.abb[month], levels = month.abb)) |>
+  ggplot(aes(x = month, y = avg_measles, group = country, color = country)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE,
+              linewidth = 0.5,
+              linetype = "dashed",
+              col = "black") +
+  theme_linedraw() +
+  scale_color_brewer(palette = "Dark2") +
+  facet_wrap(~country, scales = "free_y") +
+  theme(axis.text.x = element_text(size = 6),
+        legend.position = "none") +
+  labs(x = "Month", title = "Measles Cases by Month Across the World", y = "", subtitle = "Number of Total Measles Cases (Clinical, EPI linked, and Lab Confirmed)")
+```
+
+The plots for the American region (USA, Canada, Mexico, Brazil) do tend to have more positive (or less negative) trends, suggesting that countries in the Americas WHO region see on average more cases later in the year than earlier, according to our time-frame of 2012-2024.
+
+The CDCs resources on Measles may give us some context for our findings, as the virus is primarily spread through airborne droplets, and is believed to have originated from the "Rinderpest" virus dating back to before the current era in populated areas of the Eastern hemisphere.
+
+Since we know the Western hemisphere was not the original location of the virus, the Americas have experienced the lowest amount of measles cases over time, and country and region-wide data suggest that cases appear late-in-the-year more often, we are given a solid context for why this region has experienced the virus differently from the rest of the world even in the modern age.
+
+**Vaccination-Case Comparisons**
+
+Now we are curious if measles vaccination rate is an influencer in the case incidence rate among the 6 WHO regions starting in 2012, at which point the MVC1 and MVC2 vaccines had already been created.
+
+```{r}
+#| fig-alt: "Density-Ridge plots showing distributions of measles incidence rate by region on a scale comparing country MVC1 Vaccination rates. Bluer ridges indicate a lower vaccination rate, and Redder ridges indicate higher vaccination rates. (Purple falls in the middle of the span)"
+
+complete_data <- read.csv("complete_data.csv")
+
+disease_ridges <- complete_data |>
+  filter(!is.na(COVERAGE_MCV1), year <= 2024,
+         yearly_measles_incidence_rate_per_1000000_total_population > 0) |>
+  select(region, year, country, 
+         COVERAGE_MCV1,
+        yearly_measles_incidence_rate_per_1000000_total_population) |>
+  mutate(avg_mcv1 = mean(COVERAGE_MCV1), .by = region)
+
+ggplot(disease_ridges, 
+       aes(x = yearly_measles_incidence_rate_per_1000000_total_population,
+           y = region, fill = avg_mcv1)) +
+  geom_density_ridges(alpha = 0.8,scale = 1.5,
+                quantile_lines = TRUE, quantiles = 2) +
+  geom_text(
+    data = disease_ridges |> distinct(region, avg_mcv1),
+    aes(x = 1075, 
+        y = region,
+        label = paste0("MCV1: ", round(avg_mcv1), "%")),
+    vjust = -1.5, size = 3) +
+  scale_x_log10(
+    labels = comma,
+    breaks = c(0.1, 1, 10, 100, 1000),
+    minor_breaks = NULL) +
+  scale_fill_gradient(
+    low  = "dodgerblue",
+    high = "darkred",
+    name = "Avg MCV1 (%)") +
+  labs(
+    title = "Do regions with higher avg MCV1 vaccination percentages\nhave lower measles cases?",
+    subtitle = "Vertical line represents the median of the region.",
+    x = "Measles incidence rate per 1 million population",
+    y = NULL,
+    caption = "AFR = Africa  |  AMR = Americas  |\n EMR = E. Mediterranean  |  EUR = Europe  |\n  SEAR = SE Asia  |  WPR = W. Pacific |") +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+  )
+
+```
+
+The plots show how regions with lower vaccination rates tend to have higher incidence rates than regions with higher vaccination rates.
