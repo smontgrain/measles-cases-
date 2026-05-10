@@ -1,0 +1,382 @@
+---
+title: "Brazil Measles Dashboard"
+author: "Sebastien Montgrain, Adrian Antonelli, William Cuthbert"
+format:
+  dashboard:
+    theme: journal
+    logo: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/84/WHO_Logo.png/320px-WHO_Logo.png"
+    nav-buttons:
+      - icon: linkedin
+        href: https://www.linkedin.com
+        aria-label: LinkedIn
+      - icon: instagram
+        href: https://www.instagram.com
+        aria-label: Instagram
+      - icon: twitter-x
+        href: https://www.twitter.com
+        aria-label: Twitter/X
+      - icon: envelope-fill
+        href: mailto:your@email.com
+        aria-label: Email
+---
+
+```{r}
+#| message: false
+#| include: false
+library(tidyverse)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(ggridges)
+library(gt)
+library(purrr)
+library(sf)
+library(leaflet)
+library(rnaturalearth)
+library(htmlwidgets)
+library(gganimate)
+library(dplyr)
+
+cases_month <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_month.csv')
+cases_year  <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_year.csv')
+complete_data <- read.csv("complete_data.csv")
+
+country_year <- complete_data |>
+  distinct(region, country, year, .keep_all = TRUE) |>
+  filter(!is.na(COVERAGE_MCV1),
+         !is.na(yearly_measles_incidence_rate_per_1000000_total_population))
+```
+
+
+# Measles and Months {scrollable="true"}
+
+## Row {height="25%"}
+
+::: {.card}
+**Research Question:** Does time of year impact measles cases globally?
+
+Using monthly case counts across all WHO regions, we are interested in finding whether measles incidence is affected by monthly or seasonal patterns.
+
+While Figure 4 shows no clear difference between seasons for average cases (which is backed in our statistics test), Figure 3 displays average monthly measles cases by WHO world region. We notice that the Americas is the only region showing an increase in measles cases in the later months of the year.
+
+After looking at the total measles cases that have occurred within the Americas region, it is clearly seen that Brazil is the country with the greatest amount of total measles cases (~40,000).
+:::
+
+## Row {height="75%"}
+
+### Column {width="40%"}
+
+#### Map
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+americas_data <- cases_year |>
+  filter(region == "AMRO") |>
+  group_by(country) |>
+  summarize(measles = sum(measles_total, na.rm = TRUE), 
+            iso3 = first(iso3),
+            .groups = "drop")
+
+americas_map <- world |>
+  filter(region_un == "Americas") |>
+  left_join(americas_data, by = c("iso_a3" = "iso3"))
+
+color_pallete <- colorNumeric(palette = "Reds",
+                              domain = americas_data$measles,
+                              na.color = "lightgrey")
+
+my_map <- americas_map |>
+  leaflet() |>
+    addPolygons(fillColor = ~color_pallete(measles),
+                color = "black",
+                weight = 1,
+                fillOpacity = 0.9,
+                label = ~paste0(name, ": ", measles)) |>
+  addLegend(pal = color_pallete, values = ~measles, title = "Measles Cases") |>
+  onRender("function(el, x) {el.style.background = '#add8e6';}") #had to look up this function because I didn't want non american countries in the map, and the default gray didn't look good
+
+my_map
+```
+
+### Column {width="60%"}
+
+::: {.panel-tabset}
+
+#### Monthly Cases by Region
+
+```{r}
+#| fig-alt: "Table showing average measles cases by month for each world region"
+
+case_ranking_by_months <- cases_month |>
+  group_by(month, region) |>
+  filter(measles_total >= 0) |>
+  summarise(avg_measles = mean(measles_total, na.rm = TRUE), .groups = "drop") |>
+  mutate(month = factor(month.abb[month], levels = month.abb),
+         region = recode(region,
+                         "AFR"  = "Africa",
+                         "AMR"  = "Americas",
+                         "EMR"  = "Eastern Mediterranean",
+                         "EUR"  = "Europe",
+                         "SEAR" = "South-East Asia",
+                         "WPR"  = "Western Pacific"))
+
+case_ranking_by_months |>
+  pivot_wider(names_from = "month", values_from = "avg_measles") |>
+  gt() |>
+  fmt_number(columns = where(is.numeric), decimals = 2) |>
+  cols_label(region = "Region") |>
+  tab_header(title = "Average Monthly Measles Cases by Region") |>
+  tab_style(style = cell_text(weight = "bold"), locations = cells_title(groups = "title")) |>
+  tab_source_note(source_note = "Data source: World Health Organization (WHO)") |>
+  data_color(columns = where(is.numeric),
+             palette = c("white", "darkred"),
+             direction = "row")
+```
+
+#### Monthly Trend Lines
+
+```{r}
+#| fig-alt: "Line plot showing average measles cases by month per region with trend lines"
+#| fig-cap: "Figure 3"
+#| message: false
+
+ggplot(case_ranking_by_months,
+       aes(x = month,
+                  y = avg_measles, 
+                  group = region, 
+                  color = region)) +
+  geom_line() +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.5, linetype = "dashed", col = "black") +
+  facet_wrap(~region, scales = "free_y") +
+  labs(x = "Month", title = "Measles Cases by Month Across the World", y = "",
+       subtitle = "Number of Total Measles Cases (Clinical, EPI linked, and Lab Confirmed)") +
+  theme_linedraw() +
+  scale_color_brewer(palette = "Dark2") +
+  theme(axis.text.x = element_text(size = 6), legend.position = "none")
+```
+
+
+#### Statistical Tests
+
+```{r}
+#| fig-alt: "Table displaying F-test results for month and season predictors"
+
+tibble(
+  Model = c("Month", "Season"),
+  Predictor = c("Month", "Season"),
+  DF_numerator = c(1, 2),
+  DF_denominator = c(22630, 69),
+  F_statistic = c(68.34, 0.658),
+  p_value = c("< 2e-16", "0.521"),
+  Conclusion = c("Significant", "Not significant")) |>
+  gt() |>
+  fmt_number(columns = F_statistic, decimals = 2) |>
+  cols_label(DF_numerator = "DF Numerator", DF_denominator = "DF Denominator",
+             F_statistic = "F Statistic", p_value = "p-value") |>
+  tab_header(title = "Testing for Significance: Month and Season as Predictors of Measles Cases") |>
+  tab_style(style = cell_text(weight = "bold"), locations = cells_title(groups = "title")) |>
+  tab_style(style = cell_fill(color = "green4"),
+            locations = cells_body(columns = p_value, rows = 1)) |>
+  tab_style(style = cell_fill(color = "red2"),
+            locations = cells_body(columns = p_value, rows = 2))
+    
+```
+
+:::
+
+# Brazil Extension
+
+## Row {height="25%"}
+
+::: {.card}
+### Why Brazil?
+
+The Americas are seen to have differing monthly measles trends than the other 5 WHO world regions, and among the countries within the "Americas" region, Brazil accounted for a majority of the reported Measles cases.
+We decided to expand on our month-trends exploration between the years of 2012-2025 by including data concerning the average monthly precipitation of Brazil in order to test whether monthly measles trends share a relationship with monthly  precipitation trends.
+
+```{r}
+Brazil_data <- read.csv("Brazil_Weather.csv", header = TRUE)
+
+
+```
+
+:::
+
+## Row {height="75%"}
+
+### Column {width="50%"}
+
+:::{.card}
+
+#### Brazil Monthly Measles Trends against Monthly Precipitation Trends Animation
+
+```{r}
+Brazilian_cases <- complete_data %>%
+  filter(country == "Brazil") %>%
+  group_by(month) %>%
+  summarise(Value = sum(measles_total, na.rm = TRUE)) %>%
+  mutate(Percent = Value / sum(Value) * 100, 
+         dataset = "Annual Measles Case (%) by Month")
+
+weather <- Brazil_data %>%
+  mutate(month = 1:12, Val = Precipitation..mm., 
+         dataset = "Annual Precipitation (%) by Month") %>%
+  mutate(Percent = Val / sum(Val) * 100) %>%
+  select(month, Percent, dataset)
+
+temp <- Brazil_data %>%
+  mutate(month = 1:12, Val = Average.Mean.Surface.Air.Temperature...C., 
+         dataset = "Annual Mean Surface Air Temperature (Celcius) by Month") %>%
+  mutate(Percent = Val / sum(Val) * 100) %>%
+  select(month, Percent, dataset)
+
+combined_values <- bind_rows(Brazilian_cases, weather, temp) %>%
+  group_by(dataset) %>%
+  mutate(fill_color = case_when(
+    Percent == max(Percent) ~ "High",
+    Percent == min(Percent) ~ "Low",
+    TRUE ~ "Normal")) %>%
+  ungroup()
+
+AnimatedGraph <- ggplot(combined_values, aes(x = month, y = Percent)) +
+  geom_line(aes(group = 1), color = "gray40") +
+  geom_point(aes(color = fill_color), size = 4) +
+  scale_color_manual(values = c("High" = "red", "Low" = "blue", "Normal" = "gray"),
+                    breaks = c("High", "Normal", "Low"),
+                    name = "") +
+  scale_x_continuous(breaks = 1:12, labels = month.abb) +
+  scale_y_continuous(labels = function(x) paste0(round(x, 1), "%")) +
+  labs(
+    title = "{closest_state}",
+    subtitle = "Red = peak month | Blue = lowest month",
+    x = "Month",
+    y = "Percentage of Annual Total (%)"
+  ) +
+  transition_states(dataset) +
+  theme_bw()
+
+animate(AnimatedGraph, nframes = 100, fps = 10)
+
+```
+:::
+
+
+### Column {width="50%"}
+
+:::{.card}
+
+#### Significance
+
+```{r}
+#| echo: false
+
+test_data <- Brazilian_cases %>%
+  select(month, measles_percent = Percent) %>%
+  left_join(
+    weather %>%
+      select(month, precip_percent = Percent),
+    by = "month"
+  ) %>%
+  left_join(
+    temp %>%
+      select(month, temp_percent = Percent),
+    by = "month"
+  )
+
+```
+
+```{r}
+#| fig-alt: "Table displaying correlation test results for Brazil temperature and precipitation against monthly measles cases"
+
+precip_test <- cor.test(
+  test_data$measles_percent,
+  test_data$precip_percent,
+  method = "pearson"
+)
+
+temp_test <- cor.test(
+  test_data$measles_percent,
+  test_data$temp_percent,
+  method = "pearson"
+)
+
+tibble(
+  Model = c("Precipitation", "Temperature"),
+  
+  Predictor = c(
+    "Monthly Precipitation",
+    "Mean Surface Temperature"
+  ),
+  
+  Correlation = c(
+    precip_test$estimate,
+    temp_test$estimate
+  ),
+  
+  t_statistic = c(
+    precip_test$statistic,
+    temp_test$statistic
+  ),
+  
+  DF = c(
+    precip_test$parameter,
+    temp_test$parameter
+  ),
+  
+  p_value = c(
+    precip_test$p.value,
+    temp_test$p.value
+  ),
+  
+  Conclusion = c(
+    ifelse(precip_test$p.value < 0.05,
+           "Significant",
+           "Not significant"),
+    
+    ifelse(temp_test$p.value < 0.05,
+           "Significant",
+           "Not significant")
+  )
+) |>
+  
+  gt() |>
+  
+  fmt_number(
+    columns = c(Correlation, t_statistic),
+    decimals = 2
+  ) |>
+  
+  fmt_number(
+    columns = p_value,
+    decimals = 4
+  ) |>
+  
+  cols_label(
+    t_statistic = "t Statistic",
+    p_value = "p-value",
+    DF = "Degrees of Freedom"
+  ) |>
+  
+  tab_header(
+    title = "Testing for Significance: Temperature and Precipitation as Predictors of Measles Cases in Brazil"
+  ) |>
+  
+  tab_style(
+    style = cell_text(weight = "bold"),
+    locations = cells_title(groups = "title")
+  )
+```
+
+:::
+
+
+
+
+
+
+
+
+
+
+
