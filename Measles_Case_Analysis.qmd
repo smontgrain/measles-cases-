@@ -23,33 +23,21 @@ cases_year <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience
 complete_data <- read.csv("complete_data.csv")
 ```
 
-## Data Description
+## Modern Measles
 
-This project initially revolved around a vast provisional dataset collected from the World Health Organization by Jen Richmond of “R-Ladies Sydney” and John Harmon, the principal developer at “Atorus Research”. The dataset names are “cases_month” and “cases_year”. The pair made their most recent push on June 21st, 2025, delivering us data concerning location, time, and case breakdown of Measles and Rubella. By “case breakdown”, we mean to say that the number of cases reported for each country, each month of each year, was reported as either “Suspected”, “Clinically Compatible”, “Epidemiologically Linked” or “Laboratory Confirmed”.
+Measles is a highly contagious virus that has continued to challenge public health systems across the globe. Many people may associate Measles as a problem as the past, but outbreaks still occur regularly. The World Health Organization estimates 95,000 deaths were linked to measles globally in 2024, up 20% from the year before. Additionally, in the United States, as of May, there have been nearly the same number of confirmed Measles cases in 2026 than in all of 2025, and cases are up 10x from 2024. Because of this, understanding where and when measles cases occur, and what factors influence those patterns, remains an important and relevant question in modern global health.
 
-The observational unit for this dataset is a single country, meaning that these case variables were collected each month of each year spanning January 2012 - June 2025. These data were collected by Richmond and Harmon with the ultimate goal of shedding more light on the diseases in response to a large measles outbreak in the United States. The pair understands that measles (and rubella) continue to be a threat around the world, so downloading this data helped them pursue questions related to regional and seasonal patterns relevant to modern-day global society.
+Our interest in measles analysis initially revolved around a vast provisional dataset collected from the World Health Organization by Jen Richmond of “R-Ladies Sydney” and John Harmon, the principal developer at “Atorus Research”. The data set was last updated on June 21st, 2025, delivering us data concerning location, time, and case breakdown of Measles and Rubella. By “case breakdown”, we mean to say that the number of cases reported for each country, each month of each year, was reported as either “Suspected”, “Clinically Compatible”, “Epidemiologically Linked” or “Laboratory Confirmed”.
 
-After doing initial analyses on this dataset (which was conveniently broken up into monthly and annual findings), our group wished to explore more modern sides of the disease that the original dataset failed to include; vaccination and mortality reduction. We were given the number of cases relevant to each country for a span of time, but not given information on what happened after diagnosis, so we decided to follow that trail. The “Coverage” dataset was web-scraped on April 17th, 2026, from the WHO page on global immunization, specifically a table discussing “estimates of regional immunization coverage with the first and second doses of measles-containing vaccine administered through routine immunization services, reported measles cases, and measles incidence, by World Health Organization region — worldwide, 2000–2021”(WHO) For “Coverage”, the observational unit was a world region as opposed to a country, but luckily all datasets contained the common variable of world region, preventing any complications in merging.
+The observational unit for this dataset is a single country for a given month, meaning that these case variables were collected each month of each year spanning January 2012 - June 2025. These data were collected by Richmond and Harmon with the ultimate goal of shedding more light on the diseases in response to a large measles outbreak in the United States. The pair understands that measles (and rubella) continue to be a threat around the world, so downloading this data helped them pursue questions related to regional and seasonal patterns relevant to modern-day global society.
 
-Our goal with including this dataset was simply to provide information on worldwide measles vaccination coverage, meaning the percentage of the region population that was estimated to have received the vaccine. The “Vaccine” dataset similarly was collected via the WHO on April 17th, 2026. However, this time an interface on the WHO website allowed for a direct download of the specific timespan our group was hoping to collect, so we ended up downloading this dataset containing more specific information on estimated number of vaccinations administered, the amount of vaccinations they had targeted to administer, and the specific antigen (MCV1 or MCV2) proportion estimate for each region.
+After doing initial analyses on this dataset, we wished to explore more modern sides of the disease that the original dataset failed to include; vaccination and mortality reduction. We were given the number of cases relevant to each country for a span of time, but not given information on what happened after diagnosis, so we decided to follow that trail. We obtained data on vaccine coverage from the WHO page on global immunization on April 17th, 2026. Unlike the original case data, which are organized at the country level, these vaccination datasets are reported at the regional level. Our goal with including this coverage data was simply to provide information on worldwide measles vaccination coverage, meaning the percentage of the region population that was estimated to have received the vaccine. 
 
-The observational unit for “Vaccine” is also a world region, creating a clear merge pathway for our final combined dataset; “complete_data”. This final vaccine dataset simply provided some extra detail that bolstered our coverage data under our ultimate aim to understand how vaccination plays a role in modern measles.
+In addition, a second dataset was obtained from the WHO on April 17th, 2026. This dataset provides more detailed information on vaccination efforts, including the number of doses administered, the number of doses targeted, and coverage estimates for specific vaccine types such as MCV1 and MCV2. Its observational unit is also a world region. Both datasets were collected by the WHO through international reporting systems and are of interest because they provide insight into how vaccination coverage varies across regions. Incorporating this information allows us to better understand how immunization efforts may influence patterns in measles cases worldwide.
 
-## Research Questions
+With all this data at our disposal, we aimed to investigate two main questions: How does vaccination percentages affect measles incidence rates by region? And, does time of year impact measles cases globally? Understanding these relationships allows us to evaluate how effective vaccination efforts appear to be globally, while also identifying whether outbreaks tend to cluster in certain months. If clear seasonal patterns exist, they could offer valuable insight into when and where public health systems should be most prepared. Together, these questions aim to move beyond simply counting cases and instead uncover the underlying patterns that shape the spread of measles around the world.
 
-Using the data outlined above we aimed to answer two questions:
-
-The first question, using vaccine data from WHO:
-
-How does vaccination percentages affect measles incidence rates by region?
-
-The second question:
-
-Does time of year impact measles cases globally?
-
-# Analysis 1:
-
-**How does vaccination percentages affect measles incidence rates by region?**
+## How does vaccination percentages affect measles incidence rates by region?
 
 ```{r}
 #in order to not overcount rows and have errors with NA's:
@@ -59,9 +47,7 @@ country_year <- complete_data |>
          !is.na(yearly_measles_incidence_rate_per_1000000_total_population))
 ```
 
-We are interested in seeing the differences in vaccination percentages and incidence rates by region.
-
-### Table 1: Vaccination
+We are interested in seeing the differences in vaccination percentages and incidence rates by region. We are interested in seeing which countries have the highest MCV1 and MCV2 coverage and how the average incidence rates per 1M corresponds to this information.
 
 ```{r}
 #| fig-alt: "Table displaying MCV vaccination coverage and incidence per one million by world region"
@@ -113,7 +99,7 @@ Regional_Summaries <- country_year |>
   tab_style(
     style = cell_fill(color = "#D9EAF7"),
     locations = cells_column_spanners()) |>
-  tab_source_note(source_note = "Data source: World Health Organization (WHO) Measles & Rubella Surveillance, 2012–2024")
+  tab_source_note(source_note = "Table 1: Vaccination coverage per region")
 
  
 Regional_Summaries
@@ -121,9 +107,9 @@ Regional_Summaries
 
 ```
 
-Seeing how Europe had the highest MCV1 Coverage percentage we believed it would be interesting to see the statistics by country.
+From our table we can see that Africa has the lowest MCV1 and MCV2 coverage percentages however they do not have the highest average incidence per 1M. We also see that The Americas have not necessarily the highest MCV1 or MCV2 coverage percentages however they have the smallest avg incidence per 1M which further supports the idea that vaccination coverage may not be the main factor in average incidence rates per 1M. We do also see that the Western Pacific region also has high MCV1 and MCV2 coverage percentages however there is the highest average incidence rate per 1M.
 
-### Table 2: European Countries
+Seeing how Europe had the highest MCV1 Coverage percentage we believed it would be interesting to see the statistics by country to get a new country perspective.
 
 ```{r}
 #| fig-alt: "Table displaying measles incidence and vaccination coverage by country for Eurpoes top ten highest incidence countires"
@@ -175,7 +161,7 @@ European_Table_Data <- European_Data |>
   tab_style(
     style = cell_fill(color = "#D4EDDA"),
     locations = cells_column_spanners()) |>
-  tab_source_note(source_note = "Data source: World Health Organization (WHO) Measles & Rubella Surveillance, 2012–2024")
+  tab_source_note(source_note = "Table 2: Vaccination coverage for the top 10 European avg incidence rates per 1M")
 
  
 European_Table_Data
@@ -183,13 +169,13 @@ European_Table_Data
 
 ```
 
-After looking at our table of European country statistics we believed it would be interesting to see the measles incidence rates per year in the top 5 countries.
+We can see that the top 6 countries have the same MCV1 coverage percentage which is really high however it has insanely large incidence rates per 1M. Seeing that the MCV1 coverage percentage for these top 6 countries are the exact same it is very suspicious and makes us wonder what does the incidence rate look like by country over time so we can better analyze whether a spike caused these high numbers.
 
-### Visualization 1
+After looking at our table of European country statistics we believed it would be interesting to see the measles incidence rates per year in the top 5 countries.
 
 ```{r}
 #| fig.alt: "A faceted line chart showing annual measles incidence per 1,000,000 population from 2012 to 2024 for the five European countries with the highest average incidence rates which are Georgia, Kazakhstan, Kyrgyzstan, Romania, and Ukraine. Each country occupies its own panel, sharing the same scaling across all panels. With our visual we are able to see the major outbreak spikes at different points in time for each country, having Kyrgyzstan peaking near 3,000 in 2015, Georgia and Ukraine spiking around 2018 to 2019, and Kazakhstan and Kyrgyzstan surging again in 2023 to 2024."
-#| fig-cap: "Figure 1"
+#| fig-cap: "Figure 1: 5 highest European countries avg incidence per 1M over the years of 2012-2024"
 
 top5_eur <- country_year |>
   filter(region == "EUR") |>
@@ -230,8 +216,7 @@ ggplot(top5_data, aes(x = year,
     title = "Measles Outbreaks Over Time in Europe's 5\n Highest Incidence Countries",
     subtitle = "Annual measles incidence per 1,000,000 population (2012–2024)",
     x = "Year",
-    y = "Incidence per 1,000,000 Population",
-    caption = "5 highest European countries avg incidence per 1M over the years of 2012-2024") +
+    y = "Incidence per 1,000,000 Population") +
   theme_minimal() +
   theme(
     plot.title = element_text(face = "bold", size = 14),
@@ -251,15 +236,13 @@ ggplot(top5_data, aes(x = year,
 
 ```
 
-We saw that there is lots of variation in all of the years however the country with the largest spike was Kyrgyzstan in 2015 having nearly 3,000 cases.
+We saw that there is lots of variation in all of the years however the country with the largest spike was Kyrgyzstan in 2015 having nearly 3,000 cases. We can see that the countries Kazakhstan, Romania, and Ukraine have all had baseline measles incidence rates with occasional spikes for short periods of times. These three countries during their spikes have not had more than 2,000 incidence per 1M while the other two countries in our graph Georgia and Kyrgyzstan have had 2,000 + during the peak years. Georgia and Kyrgyzstan are more variable having more peaks than the other countries in our figure. This data does show that even in a high vaccination MCV1 region there are still large spikes in cases.
 
-Now we are curious if MVC1 coverage percentage is an influencer in the case incidence rate among the 6 WHO regions starting in 2012.
-
-### Visualization 2
+Moving away from a focused Europe perspective we are now interested in seeing more broadly how does MCV1 coverage percentage influence the case incidence rate among the 6 WHO regions starting in 2012. We are interested in seeing whether having a larger MCV1 coverage percentage allows WHO regions to have a lower average incidence rate per 1M.
 
 ```{r}
 #| fig-alt: "Density-Ridge plots showing distributions of measles incidence rate by region on a scale comparing country MVC1 Vaccination rates. Bluer ridges indicate a lower vaccination rate, and Redder ridges indicate higher vaccination rates. (Purple falls in the middle of the span)"
-#| fig-cap: "Figure 2"
+#| fig-cap: "Figure 2: MCV1 Vaccination percentages and Measles Incidence"
 #| message: false
 
 complete_data <- read.csv("complete_data.csv")
@@ -305,13 +288,13 @@ ggplot(disease_ridges,
 
 ```
 
-The plots show how regions with lower vaccination rates tend to have higher incidence rates than regions with higher vaccination rates.
+Our data supports the idea that the regions with lower vaccination rates tend to have higher incidence rates than regions with higher vaccination rates. The blue African region shows a 69% MCV1 coverage and has the highest median of avg Incidence rates per 1M. This shows that there could be a relationship between the values. However, other regions like Europe with a 94% MCV1 coverage percentage don't necessarily have the lowest median average incidence rates per 1M and this shows that this would be a interesting relationship that should be explored further at a different time. We can also see that the Eastern Mediterranean region also has a 80% MCV1 coverage percentage but has a close median value to higher vaccinated regions such as South East Asia meaning that vaccination percentages is not the end all be all in terms of reducing incidence rates.
 
-# Analysis 2:
+Seeing that vaccination percentages isn't the only factor in measles cases we are also interested in seeing the relationship between time of year and measles cases.
 
-**Does time of year impact measles cases globally?**
+## Does time of year impact measles cases globally?
 
-### Table 3: Month
+Now lets investigate how time of year impacts measles cases. First we will look at how month relates to measles cases by region.
 
 ```{r}
 #| fig-alt: "Table showing average measles cases by month for each world region."
@@ -334,22 +317,22 @@ case_ranking_by_months |>
   gt() |>
   fmt_number(columns = where(is.numeric), decimals = 2) |>
   cols_label(region = "Region") |>
-  tab_header(title = "Average Monthly Measles Cases by Region") |>
+  tab_header(title = "Average Monthly Measles Cases by Region", subtitle = "Shading is scaled within each region") |>
   tab_style(style = cell_text(weight = "bold"),
             locations = cells_title(groups = "title")) |>
-  tab_source_note(source_note = "Data source: World Health Organization (WHO)")
-
+  tab_source_note(source_note = "Table 3: Average Monthly Measles Cases by WHO Regions") |>
+  data_color(columns = where(is.numeric),
+             palette = c("white", "darkred"),
+             direction = "row")
 
 ```
 
-Table 3 has important data but is quite hard to understand by looking at it, so, we will visualize it.
-
-### Visualization 3
+We can see most countries have their highest totals near the beginning of the calendar year from the majority of dark red shading coming from the early months. The Americas however have higher totals near the end of the year. We can also see South-East Asia has the highest totals out of all the regions for any given month. Before analyzing these observations further, let's visualize this data to make it easier to digest.
 
 ```{r}
 #| fig-alt: "Line plot showing average measles cases by month for each world region (linear model included for each), with separate panels for each region."
 #| message: false
-#| fig-cap: "Figure 3"
+#| fig-cap: "Figure 3: Measles Cases by Month Across the World"
 
 
 ggplot(case_ranking_by_months, aes(x = month, y = avg_measles, group = region, color = region)) +
@@ -370,7 +353,7 @@ Figure 3 shows that all regions except the Americas, there is a negative trend i
 
 The CDCs resources on Measles may give us some context for our findings, as the virus is primarily spread through airborne droplets, and is believed to have originated from the "Rinderpest" virus dating back to before the current era in populated areas of the Eastern hemisphere.
 
-Since we know the Western hemisphere was not the original location of the virus, the Americas have experienced the lowest amount of measles cases over time, and country and region-wide data suggest that cases appear late-in-the-year more often, we are given a solid context for why this region has experienced the virus differently from the rest of the world even in the modern age.
+Since we know the Western hemisphere was not the original location of the virus, the Americas have experienced the lowest amount of measles cases, and country and region-wide data suggest that cases appear later in the year more often, we are given a solid context for why this region has experienced the virus differently from the rest of the world even in the modern age.
 
 ```{r}
 largest_countries <- c("India",
@@ -436,7 +419,7 @@ get_season <- function(country_name, month_name) {
   }
 ```
 
-### Table 4: Season
+So we can see that month effects measles cases, but now lets investigate if this is simply due to the time of year around the world or because of the season in each country individually. To analyze by season, we selected the highest populated country in each WHO region, and categorized summer as the three warmest months and winter as the three coldest. The six representative countries we picked include India, China, United States of America, Indonesia, Pakistan, and Nigeria.
 
 ```{r}
 #| fig-alt: "Table displaying average monthly measles cases by season. Season catigorized as summer, winter, and other."
@@ -460,16 +443,14 @@ country_month_summary |>
   tab_header(title = "Average Monthly Measles Cases per Country by Season") |>
   tab_style(style = cell_text(weight = "bold"),
             locations = cells_title(groups = "title")) |>
-  tab_source_note(source_note = "Data from most populated country from each region (six countries total)")
+  tab_source_note(source_note = "Table 4: Measles Cases by Season")
 ```
 
-As we can see in table 4, summer has the highest average measles cases, followed by winter and other.
-
-### Visualization 4
+As we can see in table 4, summer has the highest average measles cases, followed by winter and then other. Now we can visualize this to get a better picture of what is going on.
 
 ```{r}
 #| fig-alt: "Violin plot showing distrobution of measles cases bases on season for six representative countries"
-#| fig-cap: "Figure 4"
+#| fig-cap: "Figure 4: Meases Cases by Season"
 
 country_month_summary |>
   ggplot(aes(x = season, y = avg_measles, fill = season)) +
@@ -477,7 +458,7 @@ country_month_summary |>
   labs(title = "Average Measles Cases per Country by Season",
        subtitle = "Summer and winter determined by average temperature, data from six representative countries",
        x = "Season",
-       y = "") +
+       y = "Measles Cases") +
   scale_fill_manual(values = c("Summer" = "darkred",
                                "Winter" = "dodgerblue",
                                "Other"  = "#1A7A4A")) +
@@ -485,11 +466,9 @@ country_month_summary |>
   theme(legend.position = "none")
 ```
 
-We can see in figure 4 that the distributions of measles cases bases on season have slightly different shapes, but are overall quite similar. Non-winter months tend to be pretty varied in their measles distribution, while winter months have typical values, followed by a gap, and then spiked values. This may indicate that winter often sees typical measles counts but has seen a few outbreaks over the years as well.
+We can see in figure 4 that the distributions of measles cases by season have slightly different shapes, but are overall quite similar. Non-winter months tend to be pretty varied in their measles distribution, while winter months have typical values, followed by a gap, and then spiked values. Within our graph we see that there is some area towards the top of the graph indicating higher measles cases in some winter seasons. This may indicate that winter often sees typical measles counts but has seen a few outbreaks over the years as well meaning there could be an association with seasons and measles cases.
 
-### Statistical Significance of Month and Season
-
-### Table 5: F tests
+Following our previous analysis of seasons and measles cases we were left with the impression that there may be an association between seasons and measles cases. In order to test our theory that measles cases and seasons could be associated we decided to conduct a significance test. However, in addidtion to seasons we are also interested in whether there is an association between months and measles cases as well. Being able to conduct a proper F test will allow us to come to the conclusion on whether there is an association between measles and months or measles and seasons.
 
 ```{r}
 #| fig-alt: "Table displaying F-test results for significance of month and season on year. Month was significant and Season was not with p-value of 0.521"
@@ -498,7 +477,6 @@ We can see in figure 4 that the distributions of measles cases bases on season h
 #summary(aov(avg_measles ~ season, data = country_month_summary))
 
 anova_results <- tibble(
-  Model = c("Month", "Season"),
   Predictor = c("Month", "Season"),
   DF_numerator = c(1, 2),
   DF_denominator = c(22630, 69),
@@ -515,7 +493,17 @@ anova_results |>
              p_value = "p-value") |>
   tab_header(title = "Testing for Significance") |>
   tab_style(style = cell_text(weight = "bold"),
-            locations = cells_title(groups = "title"))
+            locations = cells_title(groups = "title")) |>
+  tab_style(style = cell_fill(color = "green4"),
+            locations = cells_body(columns = p_value, rows = 1)) |>
+  tab_style(style = cell_fill(color = "red2"),
+            locations = cells_body(columns = p_value, rows = 2)) |>
+    tab_source_note(source_note = "Table 5: F-tests for Month and Season")
 ```
 
-The F tests indicate that month is a significant predictor of measles cases in the overall monthly model, while the season variable was not significant in the six country model. This means the data provide strong evidence that measles cases vary across the year, but this simplified winter/summer/other classification does not explain enough variation to be statistically significant. Because the season model was based on only six countries and a rough season grouping, this result may be worth investigating further. Overall, the results suggest that calendar month may capture the timing of measles incidence better than this country-specific season variable. This makes sense because measles is a highly contagious virus, so a spike in one country is likely to spread to many others in the same month, regardless of the current season in the country to which it spreads.
+The F tests indicates that months are a significant predictor of measles cases in the overall monthly model (p = 2e-16), while the season variable was not significant in the previous seasons model (p = 0.521). This means that the data provides strong evidence that measles cases vary across the year, as we saw in figure 3. Yet, the simplified winter/summer/other classification from figure 4 does not explain enough variation to be statistically significant. Because the season model was based on only six countries and a rough seasonal grouping, this result may be worth investigating further on a larger scale. Overall, the results suggest that calendar month may capture the timing of measles incidence better than the country-specific season variable. Our results makes sense because measles is a highly contagious virus, meaning a spike in one country is likely to spread to many others in the same month, regardless of the current season in the country to which it spreads.
+
+
+## Takeaways
+
+After looking back at our analysis, we can see that vaccination coverage shows an association with lower incidence rates, however it is not the only factor contributing to Measles incidence rates. We can see abnormalities and exceptions within our graphs of vaccination coverage effect on incidence rates highlighting that a proper significance test could help us further a decision on whether vaccination coverage is a significant predictor in incidence rates. On the other hand, in regards to timing and seasons, we observed a notable effect of month on measles cases, with most regions peaking around March. However, whether this pattern is driven by season specifically requires further analysis before any conclusions can be drawn.
