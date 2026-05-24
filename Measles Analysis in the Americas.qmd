@@ -1,0 +1,447 @@
+---
+title: "Measles Analysis in the Americas"
+author: "Sebastien Montgrain, Adrian Antonelli, William Cuthbert"
+format:
+  dashboard:
+    theme: journal
+    logo: "https://www.who.int/ResourcePackages/WHO/assets/dist/images/logos/en/h-logo-white.svg"
+    nav-buttons:
+      - icon: linkedin
+        href: https://www.linkedin.com
+        aria-label: LinkedIn
+      - icon: instagram
+        href: https://www.instagram.com
+        aria-label: Instagram
+      - icon: twitter-x
+        href: https://www.twitter.com
+        aria-label: Twitter/X
+      - icon: envelope-fill
+        href: mailto:your@email.com
+        aria-label: Email
+server: shiny
+---
+
+```{r}
+#| message: false
+#| warning: false
+#| include: false
+#| context: setup
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(scales)
+library(ggridges)
+library(gt)
+library(purrr)
+library(sf)
+library(leaflet)
+library(rnaturalearth)
+library(htmlwidgets)
+library(gganimate)
+library(gifski)
+library(shiny)
+library(bslib)
+library(shinyWidgets)
+library(plotly)
+
+cases_month   <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_month.csv')
+cases_year    <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-06-24/cases_year.csv')
+complete_data <- read.csv("complete_data.csv")
+Brazil_data   <- read.csv("Brazil_Weather.csv", header = TRUE)
+Brazil_decade <- read.csv("Brazil_Decade.csv", header = TRUE, check.names = FALSE)
+
+country_year <- complete_data |>
+  distinct(region, country, year, .keep_all = TRUE) |>
+  filter(!is.na(COVERAGE_MCV1),
+         !is.na(yearly_measles_incidence_rate_per_1000000_total_population))
+
+case_ranking_by_months <- cases_month |>
+  group_by(month, region) |>
+  filter(measles_total >= 0) |>
+  summarise(avg_measles = mean(measles_total, na.rm = TRUE), .groups = "drop") |>
+  mutate(
+    month  = factor(month.abb[month], levels = month.abb),
+    region = recode(region,
+                    "AFR"  = "Africa",
+                    "AMR"  = "Americas",
+                    "EMR"  = "Eastern Mediterranean",
+                    "EUR"  = "Europe",
+                    "SEAR" = "South-East Asia",
+                    "WPR"  = "Western Pacific")
+  )
+
+months_ordered <- factor(month.abb, levels = month.abb)
+
+brazil_01_10 <- complete_data |>
+  filter(country == "Brazil", year >= 2001, year <= 2010) |>
+  group_by(month) |>
+  summarise(avg_cases = mean(measles_total, na.rm = TRUE)) |>
+  right_join(data.frame(month = 1:12), by = "month") |>
+  arrange(month) |>
+  mutate(avg_cases = replace_na(avg_cases, 0))
+
+brazil_11_20 <- complete_data |>
+  filter(country == "Brazil", year >= 2011, year <= 2020) |>
+  group_by(month) |>
+  summarise(avg_cases = mean(measles_total, na.rm = TRUE)) |>
+  right_join(data.frame(month = 1:12), by = "month") |>
+  arrange(month) |>
+  mutate(avg_cases = replace_na(avg_cases, 0))
+```
+
+# Global Measles Trends {scrollable="true"}
+
+## Row {height="25%"}
+
+::: {.card}
+### Does time of year impact measles cases globally?
+
+Using monthly case counts across all WHO regions, we investigate whether measles incidence follows monthly or seasonal patterns. The Americas stand out as the only region showing a consistent increase in cases during the latter months of the year. Among all countries in the Americas, Brazil accounts for the largest share of reported measles cases, totalling approximately 40,000 over the study period (2012-2025).
+:::
+
+## Row {height="75%"}
+
+### Column {width="40%"}
+
+#### Total Measles Cases by Country — Americas
+
+```{r}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+
+americas_data <- cases_year |>
+  filter(region == "AMRO") |>
+  group_by(country) |>
+  summarize(measles = sum(measles_total, na.rm = TRUE),
+            iso3 = first(iso3),
+            .groups = "drop")
+
+americas_map <- world |>
+  filter(region_un == "Americas") |>
+  left_join(americas_data, by = c("iso_a3" = "iso3"))
+
+color_pallete <- colorNumeric(palette = "Reds",
+          domain = americas_data$measles, 
+          na.color = "lightgrey")
+
+americas_map |>
+  leaflet() |>
+  addPolygons(
+    fillColor = ~color_pallete(measles),
+    color = "black",
+    weight = 1,
+    fillOpacity = 0.9,
+    label = ~paste0(name, ": ", measles)) |>
+  addLegend(pal = color_pallete, values = ~measles, title = "Total Cases") |>
+  onRender("function(el, x) {el.style.background = '#add8e6';}")
+```
+
+### Column {width="60%"}
+
+#### Measles Cases by Month per Region
+
+```{r}
+card(card_header("Measles Cases by Month per Region"),
+     fluidRow(column(width = 3,
+                     tags$div(style = "margin-top: -10px;",
+                     checkboxGroupInput(
+                       inputId = "selected_regions",
+                       label = "Select Region(s):",
+                       choices = unique(case_ranking_by_months$region),
+                       selected = "Americas"))),
+              column(width = 9,
+                     plotOutput("monthly_trend_plot", height = "390px"))))
+```
+
+```{r}
+#| context: server
+output$monthly_trend_plot <- renderPlot({
+  req(input$selected_regions)
+
+  filtered_data <- case_ranking_by_months |>
+    filter(region %in% input$selected_regions)
+
+  req(nrow(filtered_data) > 0)
+
+  filtered_data |>
+    ggplot(aes(x = month, y = avg_measles, group = region, color = region)) +
+    geom_line(linewidth = 1) +
+    geom_smooth(method = "lm", se = FALSE, 
+                linewidth = 0.5, linetype = "dashed", col = "black") +
+    facet_wrap(~region, scales = "free_y") +
+    labs(x = "Month", y = "Average Measles Cases") +
+    theme_linedraw() +
+    scale_color_brewer(palette = "Dark2") +
+    theme(axis.text.x = element_text(size = 9), legend.position = "none", strip.text = element_text(size = 14))
+})
+```
+
+# Monthly Significance
+
+## Row {height="30%"}
+
+:::{.card}
+### Are months and seasons predictors of measles cases and incidence?
+
+It seemed clear from our analysis that months were correlated with measles cases, and we wanted to know if this could be due to season, and the temperatures associated to each season. To test this we conducted an F-test to examine whether or not seasons or months can help us predict measles cases. Overall, the results suggest that calendar month may capture the timing of measles incidence better than the season in each specific country. Our results makes sense because measles is a highly contagious virus, meaning a spike in one country is likely to spread to many others in the same month, regardless of the current season in the country to which it spreads.
+:::
+
+## Row {height="70%"}
+
+### Results {.tabset}
+
+#### Average Monthly Measles Cases by WHO Region
+
+```{r}
+case_ranking_by_months |>
+  pivot_wider(names_from = "month", 
+              values_from = "avg_measles") |>
+  gt() |>
+  fmt_number(columns = where(is.numeric),
+             decimals = 2) |>
+  cols_label(region = "Region") |>
+  tab_header(title = "Average Monthly Measles Cases by WHO Region") |>
+  tab_style(style = cell_text(weight = "bold"), locations = cells_title(groups = "title")) |>
+  tab_source_note(source_note = "Data source: World Health Organization (WHO)") |>
+  data_color(columns = where(is.numeric),
+             palette = c("white", "darkred"),
+             direction = "row")
+```
+
+#### F-Test Results
+
+```{r}
+tibble(
+  Model = c("Month", "Season"),
+  Predictor = c("Month", "Season"),
+  DF_numerator = c(1, 2),
+  DF_denominator = c(22630, 69),
+  F_statistic = c(68.34, 0.658),
+  p_value = c("< 2e-16", "0.521"),
+  Conclusion = c("Significant", "Not Significant")) |>
+  gt() |>
+  fmt_number(columns = F_statistic, decimals = 2) |>
+  cols_label(DF_numerator = "DF Numerator",
+    DF_denominator = "DF Denominator",
+    F_statistic = "F Statistic",
+    p_value = "p-value") |>
+  tab_header(title = "F-Test Results: Month and Season as Predictors of Global Measles Cases") |>
+  tab_style(style = cell_text(weight = "bold"), locations = cells_title(groups = "title")) |>
+  tab_style(style = cell_fill(color = "green4"),
+            locations = cells_body(columns = p_value, rows = 1)) |>
+  tab_style(style = cell_fill(color = "red2"),
+            locations = cells_body(columns = p_value, rows = 2))
+```
+
+# Climate & Measles Analysis: Brazil
+
+## Row {height="20%"}
+
+::: {.card}
+### Why Brazil?
+
+Among all countries in the Americas, Brazil accounts for the greatest share of reported measles cases over the study period. This section extends the monthly trend analysis (2012–2025) by incorporating average monthly precipitation and surface temperature data for Brazil, in order to assess whether climatic factors may be associated with measles incidence patterns.
+:::
+
+## Row {height="80%"}
+
+### Column {width="50%"}
+
+::: {.card}
+
+#### Annual Distribution of Measles Cases, Precipitation, and Temperature for Brazil
+
+```{r}
+imageOutput("brazil_animation", height = "400px")
+```
+
+```{r}
+#| context: server
+output$brazil_animation <- renderImage({
+
+  Brazilian_cases <- complete_data |>
+    filter(country == "Brazil") |>
+    group_by(month) |>
+    summarise(Value = sum(measles_total,
+                          na.rm = TRUE)) |>
+    mutate(Percent = Value / sum(Value) * 100,
+           dataset = "Annual Measles Case (%) by Month")
+
+  weather <- Brazil_data |>
+    mutate(month = 1:12,
+           Val = Precipitation..mm.,
+           dataset = "Annual Precipitation (%) by Month") |>
+    mutate(Percent = Val / sum(Val) * 100) |>
+    select(month, Percent, dataset)
+
+  temp_df <- Brazil_data |>
+    mutate(month = 1:12,
+      Val = Average.Mean.Surface.Air.Temperature...C.,
+      dataset = "Annual Mean Surface Air Temperature (Celsius) by Month") |>
+    mutate(Percent = Val / sum(Val) * 100) |>
+    select(month, Percent, dataset)
+
+  combined_values <- bind_rows(Brazilian_cases, 
+    weather, temp_df) |>
+    group_by(dataset) |>
+    mutate(fill_color = case_when(
+      Percent == max(Percent) ~ "High",
+      Percent == min(Percent) ~ "Low",
+      TRUE ~ "Normal")) |>
+    ungroup()
+
+  AnimatedGraph <- ggplot(combined_values, aes(
+    x = month, y = Percent)) +
+    geom_line(aes(group = 1), color = "gray40") +
+    geom_point(aes(color = fill_color), size = 4) +
+    scale_color_manual(values = c("High" = "red",
+                  "Low" = "blue", "Normal" = "gray"), 
+                breaks = c("High", "Normal", "Low"), name = "") +
+    scale_x_continuous(breaks = 1:12,
+    labels = month.abb) +
+    scale_y_continuous(labels = function(x) paste0(round(x, 1), "%")) +
+    labs(title = "{closest_state}",
+         subtitle = "Red = peak month | Blue = lowest month", x = "Month", 
+         y = "Percentage of Annual Total (%)") +
+    transition_states(dataset, transition_length = 2, state_length = 1) +
+    enter_fade() +
+    exit_fade() +
+    theme_bw()
+
+  outfile <- tempfile(fileext = ".gif")
+  anim_save(outfile, animate(AnimatedGraph, 
+            nframes = 100, fps = 10, 
+            width = 700, height = 400, 
+          renderer = gifski_renderer()))
+
+  list(src = outfile,
+       contentType = "image/gif",
+       width = "100%",
+       height = "400px",
+       alt = "Brazil animation")
+  }, deleteFile = TRUE)
+```
+
+:::
+
+### Column {width="50%"}
+
+::: {.panel-tabset}
+
+#### Correlation Analysis
+
+```{r}
+test_data <- complete_data |>
+  filter(country == "Brazil") |>
+  group_by(month) |>
+  summarise(Value = sum(measles_total, na.rm = TRUE)) |>
+  mutate(measles_percent = Value / sum(Value) * 100) |>
+  left_join(Brazil_data |>
+      mutate(month = 1:12,
+             precip_percent = Precipitation..mm. / sum(Precipitation..mm.) * 100) |>
+      select(month, precip_percent), by = "month") |>
+  left_join(
+    Brazil_data |>
+      mutate(month = 1:12,
+      temp_percent = Average.Mean.Surface.Air.Temperature...C. /      sum(Average.Mean.Surface.Air.Temperature...C.) * 100) |>
+      select(month, temp_percent), by = "month")
+
+precip_test <- cor.test(test_data$measles_percent, test_data$precip_percent, method = "pearson")
+temp_test <- cor.test(test_data$measles_percent, test_data$temp_percent, method = "pearson")
+
+tibble(Model = c("Precipitation", "Temperature"),
+  Predictor = c("Monthly Precipitation", 
+  "Mean Surface Temperature"),
+  Correlation = c(precip_test$estimate,  temp_test$estimate),
+  t_statistic = c(precip_test$statistic, temp_test$statistic),
+  DF = c(precip_test$parameter, temp_test$parameter),
+  p_value = c(precip_test$p.value,   temp_test$p.value),
+  Conclusion = c( ifelse(precip_test$p.value < 0.05, "Significant", "Not Significant"),
+    ifelse(temp_test$p.value < 0.05, "Significant",
+           "Not Significant"))) |>
+  gt() |>
+  fmt_number(columns = c(Correlation, t_statistic), decimals = 2) |>
+  fmt_number(columns = p_value, decimals = 4) |>
+  cols_label(t_statistic = "t Statistic",
+             p_value = "p-value", 
+             DF = "Degrees of Freedom") |>
+  tab_header(title = "Pearson Correlation: Climate Variables as Predictors of Measles Incidence in Brazil") |>
+  tab_style(style = cell_text(weight = "bold"), locations = cells_title(groups = "title")) |>
+  tab_style(style = cell_fill(color = "green4"),
+            locations = cells_body(columns = p_value, rows = Conclusion == "Significant")) |>
+  tab_style(style = cell_fill(color = "red2"),
+            locations = cells_body(columns = p_value, rows = Conclusion == "Not Significant"))
+```
+
+#### Decade Comparison
+
+```{r}
+tagList(
+  tags$div(style = "margin-top: -5px;",
+    sliderTextInput(inputId = "decade_slider",
+      label = "Select Decade:",
+      choices = c("2000s", "2010s"),
+      selected = "2000s",
+      width = "100%")),
+  tags$div(style = "margin-bottom: 25px;",
+    uiOutput("decade_label")),
+  plotlyOutput("decade_temp_plot",   height = "280px"),
+  plotlyOutput("decade_precip_plot", height = "280px"),
+  plotlyOutput("decade_cases_plot",  height = "280px"))
+```
+
+```{r}
+#| context: server
+
+output$decade_label <- renderUI({
+  label <- if (input$decade_slider == "2000s") "Showing: 2000s (2001–2010)" else "Showing: 2010s (2011–2020)"
+  tags$h5(label, style = "text-align:center; color: gray; margin-bottom: 10px;")})
+
+decade_data <- reactive({
+  if (input$decade_slider == "2000s") {
+    list(temp   = Brazil_decade$`01-10 AvgTemp`,
+         precip = Brazil_decade$`01-10 AvgPrecip`,
+         label  = "(2001-2010)")
+  } else {
+    list(temp   = Brazil_decade$`11-20 AvgTemp`,
+         precip = Brazil_decade$`11-20 AvgPrecip`,
+         label  = "(2011-2020)")}})
+
+output$decade_temp_plot <- renderPlotly({
+  d <- decade_data()
+  p <- ggplot(data.frame(month = months_ordered, value = d$temp), aes(x = month, y = value, group = 1, text = round(value, 2))) +
+    geom_line(color = "tomato", linewidth = 1) +
+    geom_point(color = "tomato", size = 3) +
+    scale_y_continuous(breaks = seq(23, 26, by = 1)) +
+    labs(title = paste("Avg Temperature (°C)", d$label),
+         x = "Month", y = "") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8))
+  ggplotly(p, tooltip = "text")})
+
+output$decade_precip_plot <- renderPlotly({
+  d <- decade_data()
+  p <- ggplot(data.frame(month = months_ordered, value = d$precip), aes(x = month, y = value, group = 1, text = round(value, 2))) +
+    geom_line(color = "steelblue", linewidth = 1) +
+    geom_point(color = "steelblue", size = 3) +
+    scale_y_continuous(breaks = seq(25, 275, by = 75)) +
+    labs(title = paste("Avg Precipitation (mm)", d$label),
+         x = "Month", y = "") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8))
+  ggplotly(p, tooltip = "text")})
+
+output$decade_cases_plot <- renderPlotly({
+  p <- ggplot(data.frame(month = months_ordered, value = brazil_11_20$avg_cases),
+         aes(x = month, y = value, group = 1, text = round(value, 2))) +
+    geom_line(color = "darkred", linewidth = 1) +
+    geom_point(color = "darkred", size = 3) +
+    scale_y_continuous(breaks = seq(50, 1200, by = 550)) +
+    labs(title = "Avg Measles Cases (2012-2020)",
+         x = "Month", y = "") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 8))
+  ggplotly(p, tooltip = "text")})
+```
+
+:::
